@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Population Change in Slovakia (1996-2025)</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+        
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            max-width: 350px;
+            z-index: 1000;
+        }
+        
+        .info-panel h2 {
+            margin: 0 0 15px 0;
+            font-size: 20px;
+            color: #333;
+        }
+        
+        .info-panel p {
+            margin: 8px 0;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .metric-selector {
+            margin: 15px 0;
+        }
+        
+        .metric-selector label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .metric-selector select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .year-slider {
+            margin: 15px 0;
+        }
+        
+        .year-slider label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .year-display {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c7bb6;
+            margin: 10px 0;
+        }
+        
+        .year-slider input[type="range"] {
+            width: 100%;
+            margin: 10px 0;
+        }
+        
+        .year-range {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .legend {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f8f8f8;
+            border-radius: 4px;
+        }
+        
+        .legend h4 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+        
+        .legend-color {
+            width: 30px;
+            height: 20px;
+            margin-right: 8px;
+            border: 1px solid #999;
+        }
+        
+        .municipality-info {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e8f4f8;
+            border-radius: 4px;
+            display: none;
+        }
+        
+        .municipality-info h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #333;
+        }
+        
+        .municipality-info .stat {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            font-size: 13px;
+        }
+        
+        .municipality-info .stat-label {
+            color: #666;
+        }
+        
+        .municipality-info .stat-value {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: #666;
+            z-index: 2000;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading" class="loading">Loading map data...</div>
+    <div id="map"></div>
+    
+    <div class="info-panel">
+        <h2>Population Change in Slovakia</h2>
+        <p>Interactive map showing population changes at the municipal level</p>
+        
+        <div class="year-slider">
+            <label>Select Year:</label>
+            <div class="year-display" id="year-display">2025</div>
+            <input type="range" id="year-slider" min="1996" max="2025" value="2025" step="1">
+            <div class="year-range">
+                <span>1996</span>
+                <span>2025</span>
+            </div>
+        </div>
+        
+        <div class="metric-selector">
+            <label for="metric">Display Mode:</label>
+            <select id="metric">
+                <option value="population">Population</option>
+                <option value="change_from_base">Change from Base Year</option>
+                <option value="change_percent" selected>Percent Change from Base Year</option>
+                <option value="change_from_previous">Change from Previous Year</option>
+            </select>
+        </div>
+        
+        <div class="metric-selector" id="base-year-selector" style="display:block;">
+            <label for="base-year">Base Year:</label>
+            <select id="base-year">
+                <option value="1996">1996</option>
+                <option value="2000" selected>2000</option>
+                <option value="2010">2010</option>
+                <option value="2020">2020</option>
+            </select>
+        </div>
+        
+        <div class="legend">
+            <h4>Legend</h4>
+            <div id="legend-content"></div>
+        </div>
+        
+        <div class="municipality-info" id="municipality-info">
+            <h3 id="mun-name"></h3>
+            <div class="stat">
+                <span class="stat-label" id="current-year-label">Population 2025:</span>
+                <span class="stat-value" id="current-pop"></span>
+            </div>
+            <div class="stat">
+                <span class="stat-label" id="base-year-label">Population 2000:</span>
+                <span class="stat-value" id="base-pop"></span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Absolute Change:</span>
+                <span class="stat-value" id="change-abs"></span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Percent Change:</span>
+                <span class="stat-value" id="change-pct"></span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // Initialize the map
+        const map = L.map('map').setView([48.7, 19.5], 8);
+        
+        // Add CartoDB Light (gray) basemap tiles
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap contributors © CARTO',
+            maxZoom: 19,
+            subdomains: 'abcd'
+        }).addTo(map);
+        
+        let geojsonLayer;
+        let geojsonData;
+        let currentYear = 2025;
+        let baseYear = 2000;
+        let currentMetric = 'change_percent';
+        let availableYears = [];
+        
+        // Calculate value based on current metric
+        function getValueForFeature(feature) {
+            const props = feature.properties;
+            const currentPop = props[currentYear.toString()];
+            
+            if (currentMetric === 'population') {
+                return currentPop;
+            } else if (currentMetric === 'change_from_base') {
+                const basePop = props[baseYear.toString()];
+                return currentPop - basePop;
+            } else if (currentMetric === 'change_percent') {
+                const basePop = props[baseYear.toString()];
+                return basePop > 0 ? ((currentPop - basePop) / basePop) * 100 : null;
+            } else if (currentMetric === 'change_from_previous') {
+                const prevYear = currentYear - 1;
+                if (prevYear < Math.min(...availableYears)) return 0;
+                const prevPop = props[prevYear.toString()];
+                return prevPop ? currentPop - prevPop : 0;
+            }
+            return null;
+        }
+        
+        // Color scales for different metrics
+        function getColor(value, metric) {
+            if (value === null || value === undefined || !isFinite(value)) {
+                return '#cccccc';
+            }
+            
+            if (metric === 'population') {
+                // Population gradient (blue scale)
+                return value > 50000 ? '#08519c' :
+                       value > 10000 ? '#3182bd' :
+                       value > 5000  ? '#6baed6' :
+                       value > 2000  ? '#9ecae1' :
+                       value > 1000  ? '#c6dbef' :
+                                       '#eff3ff';
+            } else if (metric === 'change_percent') {
+                // Percent change (red-gray-green diverging)
+                // Green = increasing, Gray = neutral, Red = decreasing
+                return value > 50   ? '#1a9850' :  // Dark green
+                       value > 20   ? '#66bd63' :  // Medium green
+                       value > 10   ? '#a6d96a' :  // Light green
+                       value > 2    ? '#d9f0d3' :  // Very light green
+                       value > -2   ? '#cccccc' :  // Gray (neutral)
+                       value > -10  ? '#fdae61' :  // Light orange
+                       value > -20  ? '#f46d43' :  // Medium red-orange
+                       value > -50  ? '#d73027' :  // Dark red
+                                      '#a50026';   // Very dark red
+            } else {
+                // Absolute change (red to green diverging)
+                return value > 5000  ? '#006d2c' :
+                       value > 1000  ? '#31a354' :
+                       value > 500   ? '#74c476' :
+                       value > -500  ? '#ffffcc' :
+                       value > -1000 ? '#fd8d3c' :
+                       value > -5000 ? '#e31a1c' :
+                                       '#bd0026';
+            }
+        }
+        
+        // Style function
+        function style(feature) {
+            const value = getValueForFeature(feature);
+            return {
+                fillColor: getColor(value, currentMetric),
+                weight: 0.5,
+                opacity: 1,
+                color: 'white',
+                fillOpacity: 0.7
+            };
+        }
+        
+        // Update legend
+        function updateLegend() {
+            const legendContent = document.getElementById('legend-content');
+            let html = '';
+            
+            if (currentMetric === 'population') {
+                const grades = [0, 1000, 2000, 5000, 10000, 50000];
+                const labels = ['<1k', '1k-2k', '2k-5k', '5k-10k', '10k-50k', '>50k'];
+                for (let i = 0; i < grades.length; i++) {
+                    html += '<div class="legend-item">' +
+                           '<div class="legend-color" style="background:' + 
+                           getColor(grades[i] + 1, currentMetric) + '"></div>' +
+                           '<span>' + labels[i] + '</span></div>';
+                }
+            } else if (currentMetric === 'change_percent') {
+                const grades = [-100, -50, -20, -10, -2, 2, 10, 20, 50];
+                const labels = ['<-50%', '-50% to -20%', '-20% to -10%', '-10% to -2%', 
+                              '-2% to +2%', '+2% to +10%', '+10% to +20%', '+20% to +50%', '>+50%'];
+                for (let i = 0; i < grades.length; i++) {
+                    html += '<div class="legend-item">' +
+                           '<div class="legend-color" style="background:' + 
+                           getColor(grades[i] + 1, currentMetric) + '"></div>' +
+                           '<span>' + labels[i] + '</span></div>';
+                }
+            } else {
+                const grades = [-10000, -5000, -1000, -500, 500, 1000, 5000];
+                const labels = ['<-5k', '-5k to -1k', '-1k to -500', '-500 to +500', 
+                              '+500 to +1k', '+1k to +5k', '>+5k'];
+                for (let i = 0; i < grades.length; i++) {
+                    html += '<div class="legend-item">' +
+                           '<div class="legend-color" style="background:' + 
+                           getColor(grades[i] + 1, currentMetric) + '"></div>' +
+                           '<span>' + labels[i] + '</span></div>';
+                }
+            }
+            
+            legendContent.innerHTML = html;
+        }
+        
+        // Highlight feature
+        function highlightFeature(e) {
+            const layer = e.target;
+            layer.setStyle({
+                weight: 3,
+                color: '#666',
+                fillOpacity: 0.9
+            });
+            layer.bringToFront();
+            
+            // Update info panel
+            const props = layer.feature.properties;
+            const currentPop = props[currentYear.toString()];
+            const basePop = props[baseYear.toString()];
+            const change = currentPop - basePop;
+            const changePct = basePop > 0 ? ((currentPop - basePop) / basePop * 100) : null;
+            
+            document.getElementById('municipality-info').style.display = 'block';
+            document.getElementById('mun-name').textContent = props.name;
+            document.getElementById('current-year-label').textContent = `Population ${currentYear}:`;
+            document.getElementById('current-pop').textContent = currentPop.toLocaleString();
+            document.getElementById('base-year-label').textContent = `Population ${baseYear}:`;
+            document.getElementById('base-pop').textContent = basePop.toLocaleString();
+            document.getElementById('change-abs').textContent = 
+                (change > 0 ? '+' : '') + change.toLocaleString();
+            document.getElementById('change-pct').textContent = 
+                changePct !== null && isFinite(changePct) ? 
+                ((changePct > 0 ? '+' : '') + changePct.toFixed(1) + '%') : 'N/A';
+        }
+        
+        function resetHighlight(e) {
+            geojsonLayer.resetStyle(e.target);
+        }
+        
+        function onEachFeature(feature, layer) {
+            layer.on({
+                mouseover: highlightFeature,
+                mouseout: resetHighlight
+            });
+        }
+        
+        // Load GeoJSON
+        fetch('slovakia_population.geojson')
+            .then(response => response.json())
+            .then(data => {
+                geojsonData = data;
+                
+                // Extract available years from first feature
+                if (data.features.length > 0) {
+                    const props = data.features[0].properties;
+                    availableYears = Object.keys(props)
+                        .filter(key => !isNaN(key) && key.length === 4)
+                        .map(Number)
+                        .sort((a, b) => a - b);
+                    
+                    // Update slider
+                    const slider = document.getElementById('year-slider');
+                    slider.min = Math.min(...availableYears);
+                    slider.max = Math.max(...availableYears);
+                    slider.value = Math.max(...availableYears);
+                    currentYear = parseInt(slider.value);
+                    
+                    // Update year range display
+                    document.querySelector('.year-range span:first-child').textContent = slider.min;
+                    document.querySelector('.year-range span:last-child').textContent = slider.max;
+                    document.getElementById('year-display').textContent = currentYear;
+                }
+                
+                geojsonLayer = L.geoJSON(data, {
+                    style: style,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+                
+                // Fit map to data bounds
+                map.fitBounds(geojsonLayer.getBounds());
+                
+                // Update legend
+                updateLegend();
+                
+                // Hide loading
+                document.getElementById('loading').style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error loading GeoJSON:', error);
+                document.getElementById('loading').textContent = 'Error loading data';
+            });
+        
+        // Year slider change
+        document.getElementById('year-slider').addEventListener('input', function(e) {
+            currentYear = parseInt(e.target.value);
+            document.getElementById('year-display').textContent = currentYear;
+            if (geojsonLayer) {
+                geojsonLayer.setStyle(style);
+            }
+        });
+        
+        // Metric selector change
+        document.getElementById('metric').addEventListener('change', function(e) {
+            currentMetric = e.target.value;
+            
+            // Show/hide base year selector
+            const baseYearSelector = document.getElementById('base-year-selector');
+            if (currentMetric === 'change_from_base' || currentMetric === 'change_percent') {
+                baseYearSelector.style.display = 'block';
+            } else {
+                baseYearSelector.style.display = 'none';
+            }
+            
+            if (geojsonLayer) {
+                geojsonLayer.setStyle(style);
+                updateLegend();
+            }
+        });
+        
+        // Base year selector change
+        document.getElementById('base-year').addEventListener('change', function(e) {
+            baseYear = parseInt(e.target.value);
+            if (geojsonLayer) {
+                geojsonLayer.setStyle(style);
+            }
+        });
+    </script>
+</body>
+</html>
