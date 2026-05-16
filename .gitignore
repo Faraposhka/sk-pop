@@ -1,0 +1,9 @@
+# Source data files (too large for GitHub)
+INSPIRE_AU.gpkg
+v_om7010rr_00_00_00_en20260516213658.csv
+
+# Python script (not needed for web deployment)
+create_webmap.py
+
+# Upload instructions (not needed in repo)
+GITHUB_UPLOAD_INSTRUCTIONS.md
